@@ -53,7 +53,7 @@ public class nodeConnect extends HttpServlet {
 		
 		JSONObject res = new JSONObject();
 		
-		String DB_TABLE = null == Hour ? this.DAY_TABLE : this.HOUR_TABLE;
+		String DB_TABLE = this.HOUR_TABLE + "_" + Day;
 		
 		// nodeId循环，建立set集合
 		// 节点信息集合
@@ -73,37 +73,24 @@ public class nodeConnect extends HttpServlet {
 			System.out.print("connect success\n");
 			
 			/*
-			 SELECT * FROM B_LEASEINFOHIS_SUM A 
-             LEFT JOIN B_STATIONINFO_BRIEF B 
-             ON A.LEASESTATION = B.STATIONID
-             LEFT JOIN B_STATIONINFO_BRIEF C 
-             ON A.RETURNSTATION = C.STATIONID
-             WHERE A.LEASEDATE = '2014-04-16'
-             AND ((A.LEASESTATION = '3214' AND A.RETURNSTATION = '2409') 
+			 SELECT * FROM B_LEASEINFOHIS_SUM_2014_04_16 A
+             WHERE A.LEASEDATE = '08' AND ((A.LEASESTATION = '3214' AND A.RETURNSTATION = '2409') 
              OR (A.LEASESTATION = '2409' AND A.RETURNSTATION = '3214'));
 			 */
 			
 			// SQL预处理
 			String sqlNode = "SELECT * FROM B_STATIONINFO_BRIEF WHERE STATIONID = ?";
 					
-			String sqlHour = "SELECT * FROM B_LEASEINFOHIS_SUM "
-					// + "LEFT JOIN B_STATIONINFO_BRIEF B "
-					// + "ON A.LEASESTATION = B.STATIONID "
-					// + "LEFT JOIN B_STATIONINFO_BRIEF C "
-					// + "ON A.LEASESTATION = C.STATIONID "
-					+ "WHERE LEASEDATE = ? "
-					+ "AND LEASETIME = ?"
-					+ "AND ((LEASESTATION = ? AND RETURNSTATION = ?) "
-					+ "OR (LEASESTATION = ? AND RETURNSTATION = ?)) ";
-					
-			String sqlNoHour = "SELECT * FROM B_LEASEINFOHIS_SUM_BYDAY A "
-					+ "LEFT JOIN B_STATIONINFO_BRIEF B"
-					+ "ON A.LEASESTATION = B.STATIONID "
-					+ "LEFT JOIN B_STATIONINFO_BRIEF C "
-					+ "ON A.LEASESTATION = C.STATIONID "
-					+ "WHERE A.LEASEDATE = ? "
-					+ "AND ((A.LEASESTATION = ? AND A.RETURNSTATION = ?) "
-					+ "OR (A.LEASESTATION = ? AND A.RETURNSTATION = ?))";
+			String sqlHour = "SELECT * FROM " + DB_TABLE 
+					+ " WHERE LEASETIME = ?"
+					+ " AND ((LEASESTATION = ? AND RETURNSTATION = ?)"
+					+ " OR (LEASESTATION = ? AND RETURNSTATION = ?))";
+			
+			String sqlNoHour = "SELECT * FROM " + DB_TABLE 
+					+ " WHERE ((LEASESTATION = ? AND RETURNSTATION = ?)"
+					+ " OR (LEASESTATION = ? AND RETURNSTATION = ?))";
+			
+			System.out.println(sqlHour);
 					
 			PreparedStatement psNode = con.prepareStatement(sqlNode);
 			PreparedStatement psHour = con.prepareStatement(sqlHour);
@@ -112,7 +99,6 @@ public class nodeConnect extends HttpServlet {
 			Long t1 = System.currentTimeMillis();
 			if(Hour != null) {
 				for (int i = 0; i < NodeIdArr.length; i++) {
-					
 					psNode.setString(1, NodeIdArr[i]);
 					ResultSet nodeResult = psNode.executeQuery();
 					
@@ -131,12 +117,11 @@ public class nodeConnect extends HttpServlet {
 					}
 					
 					for (int j = i + 1; j < NodeIdArr.length; j++) {
-						psHour.setString(1, Day);
-						psHour.setString(2, Hour);
-						psHour.setString(3, NodeIdArr[i]);
+						psHour.setString(1, Hour);
+						psHour.setString(2, NodeIdArr[i]);
+						psHour.setString(3, NodeIdArr[j]);
 						psHour.setString(4, NodeIdArr[j]);
-						psHour.setString(5, NodeIdArr[j]);
-						psHour.setString(6, NodeIdArr[i]);
+						psHour.setString(5, NodeIdArr[i]);
 						
 						ResultSet linkResult = psHour.executeQuery();
 						
@@ -172,8 +157,59 @@ public class nodeConnect extends HttpServlet {
 				}
 			} else {
 				for (int i = 0; i < NodeIdArr.length; i++) {
-					for (int j = 0; j < NodeIdArr.length; i++) {
-						if (i == j) continue;
+					psNode.setString(1, NodeIdArr[i]);
+					ResultSet nodeResult = psNode.executeQuery();
+					
+					while(nodeResult.next()){
+						JSONObject nodeObj = new JSONObject();
+						nodeObj.put("id", nodeResult.getString(1));
+						nodeObj.put("name", nodeResult.getString(2));
+						nodeObj.put("x", nodeResult.getString(3));
+						nodeObj.put("y", nodeResult.getString(4));
+						nodeObj.put("bx", nodeResult.getString(5));
+						nodeObj.put("by", nodeResult.getString(6));
+						nodeObj.put("flag", nodeResult.getString(7));
+						nodeObj.put("address", nodeResult.getString(8));
+						nodeObj.put("servicetime", nodeResult.getString(9));
+						nodes.add(nodeObj);
+					}
+					
+					for (int j = i + 1; j < NodeIdArr.length; j++) {
+						psNoHour.setString(1, NodeIdArr[i]);
+						psNoHour.setString(2, NodeIdArr[j]);
+						psNoHour.setString(3, NodeIdArr[j]);
+						psNoHour.setString(4, NodeIdArr[i]);
+						
+						ResultSet linkNoResult = psNoHour.executeQuery();
+						
+						linkNoResult.setFetchSize(10000);
+						
+						int bikeCount = 0;
+						JSONArray relations = new JSONArray();
+						while(linkNoResult.next()){
+							String source = linkNoResult.getString(3);
+							String target = linkNoResult.getString(4);
+							int bikeNum = linkNoResult.getInt(5);
+							
+							JSONObject relation = new JSONObject();
+							
+							relation.put("source", source);
+							relation.put("target", target);
+							relation.put("value", bikeNum);
+							
+							relations.add(relation);
+							
+							bikeCount += bikeNum;
+						}
+						
+						if (bikeCount != 0) {
+							JSONObject linkObj = new JSONObject();
+							linkObj.put("source", NodeIdArr[i]);
+							linkObj.put("target", NodeIdArr[j]);
+							linkObj.put("value", bikeCount);
+							linkObj.put("relations", relations);
+							links.add(linkObj);
+						}
 					}
 				}
 			}
