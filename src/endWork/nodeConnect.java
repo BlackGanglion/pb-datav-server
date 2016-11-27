@@ -89,8 +89,6 @@ public class nodeConnect extends HttpServlet {
 			String sqlNoHour = "SELECT * FROM " + DB_TABLE 
 					+ " WHERE ((LEASESTATION = ? AND RETURNSTATION = ?)"
 					+ " OR (LEASESTATION = ? AND RETURNSTATION = ?))";
-			
-			System.out.println(sqlHour);
 					
 			PreparedStatement psNode = con.prepareStatement(sqlNode);
 			PreparedStatement psHour = con.prepareStatement(sqlHour);
@@ -130,12 +128,14 @@ public class nodeConnect extends HttpServlet {
 						int bikeCount = 0;
 						JSONArray relations = new JSONArray();
 						while(linkResult.next()){
+							String hour = linkResult.getString(2);
 							String source = linkResult.getString(3);
 							String target = linkResult.getString(4);
 							int bikeNum = linkResult.getInt(5);
 							
 							JSONObject relation = new JSONObject();
 							
+							relation.put("hour", hour);
 							relation.put("source", source);
 							relation.put("target", target);
 							relation.put("value", bikeNum);
@@ -187,12 +187,14 @@ public class nodeConnect extends HttpServlet {
 						int bikeCount = 0;
 						JSONArray relations = new JSONArray();
 						while(linkNoResult.next()){
+							String hour = linkNoResult.getString(2);
 							String source = linkNoResult.getString(3);
 							String target = linkNoResult.getString(4);
 							int bikeNum = linkNoResult.getInt(5);
 							
 							JSONObject relation = new JSONObject();
 							
+							relation.put("hour", hour);
 							relation.put("source", source);
 							relation.put("target", target);
 							relation.put("value", bikeNum);
