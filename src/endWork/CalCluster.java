@@ -8,6 +8,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.swing.text.html.HTMLDocument.Iterator;
 
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
@@ -79,31 +81,54 @@ public class CalCluster extends HttpServlet {
 		
 		ClustersInfo clustersInfo = mapper.readValue(params, ClustersInfo.class);
 		
-		int count = clustersInfo.getCount();
+		// 有多少区域
+		// int count = clustersInfo.getCount();
+		String day = clustersInfo.getDay();
+		String hour = clustersInfo.getHour();
+		// 所有id对应区域的map
 		List<Cluster> nodeMap = clustersInfo.getNodeMap();
+		String[] colorList = clustersInfo.getColorList();
 		
-		int map[][] = new int[count + 10][count + 10];
+		int count = colorList.length;
+		
+		List map[][] = new List[count + 10][count + 10];
 		
 		// 建图
 		for (int i = 0; i < count; i++) {
 			for (int j = 0; j < count; j++) {
-				map[i][j] = 0;
+				map[i][j] = new ArrayList();
 			}
 		}
 		
 		JSONObject res = new JSONObject();
 		
-		// 建立映射关系
+		// 建立点到区域的映射关系
+		// k -> cid
+		Map cidMap1 = new HashMap();
+		// cid -> k
+		Map cidMap2 = new HashMap();
+		// id -> k
 		Map nodeIdMap = new HashMap();
 		JSONArray nodes = new JSONArray();
+		int k = 0;
 		for(int i = 0; i < nodeMap.size(); i++)  {  
 			Cluster item = nodeMap.get(i);
+			
+			// 节点id
 			int id = item.getId();
+			// 站点id
 			int cid = item.getClusterId();
-			nodeIdMap.put(id, cid);
-			JSONObject nodeObj = new JSONObject();
-			nodeObj.put("id", id);
-			nodes.add(nodeObj);
+			
+			// 当前区域是否已被定义
+			Object index = cidMap2.get(cid);
+			if (index == null) {
+				cidMap1.put(k, cid);
+				cidMap2.put(cid, k);
+				nodeIdMap.put(id, k);
+				k++;
+			} else {
+				nodeIdMap.put(id, (int)index);
+			}
         }
 		
 		Connection con = connect.dbConn();
@@ -117,13 +142,23 @@ public class CalCluster extends HttpServlet {
 			Long t1 = System.currentTimeMillis();
 			
 			Statement sql = con.createStatement();
-			ResultSet result = sql.executeQuery("SELECT * FROM B_LEASEINFOHIS_SUM");
+			
+			ResultSet result;
+			if (hour != null) {
+				String sqlHour = "SELECT * FROM B_LEASEINFOHIS_SUM_PART partition(D" + day + ")"
+						+ " WHERE LEASETIME = " + hour;
+				result = sql.executeQuery(sqlHour);
+			} else {
+				String sqlNoHour = "SELECT * FROM B_LEASEINFOHIS_SUM_PART partition(D" + day + ")";
+				result = sql.executeQuery(sqlNoHour);
+			}
 			
 			result.setFetchSize(100000);
 			int i = 1;
 			while (result.next()) {
 				String sStr = result.getString(3);
 				String tStr = result.getString(4);
+				// 去除杂质数据
 				if (isInt(sStr) && isInt(tStr)) {
 					int source = Integer.parseInt(sStr);
 					int target = Integer.parseInt(tStr);
@@ -131,12 +166,14 @@ public class CalCluster extends HttpServlet {
 					// System.out.println(source);
 					// System.out.println(target);
 					
+					String time = result.getString(2);
 					int bikeNum = result.getInt(5);
 					Object sourceCid = nodeIdMap.get(source);
 					Object targetCid = nodeIdMap.get(target);
 					
-					if (sourceCid != null && targetCid != null) {
-						map[(int) sourceCid][(int) targetCid] = map[(int) sourceCid][(int) targetCid] + bikeNum;
+					// 去除无关数据与区域内部数据
+					if (sourceCid != null && targetCid != null && sourceCid != targetCid) {
+						map[(int) sourceCid][(int) targetCid].add(new String(sStr + "," + tStr + "," + time + "," + bikeNum));
 					}
 				}
 			}
@@ -158,14 +195,68 @@ public class CalCluster extends HttpServlet {
 		JSONArray links = new JSONArray();
 		for(int i = 0; i < count; i++) {
 			for(int j = i + 1; j < count; j++) {
-				if (map[i][j] != 0 && map[j][i] != 0) {
+				int l1 = map[i][j].size();
+				int l2 = map[j][i].size();
+				
+				if (l1 > 0 || l2 > 0) {
+					JSONArray relations = new JSONArray();
+					int allNum = 0;
+					
+					int scid = (int)cidMap1.get(i);
+					int tcid = (int)cidMap1.get(j);
+					
+					for(int z = 0; z < l1; z++) {
+						String[] info = ((String) map[i][j].get(z)).split(",");
+						String source = info[0];
+						String target = info[1];
+						String time = info[2];
+						int num = Integer.parseInt(info[3]);
+						allNum += num;
+						
+						JSONObject relation = new JSONObject();
+						relation.put("hour", time);
+						relation.put("source", source);
+						relation.put("sourceCid", scid);
+						relation.put("targetCid", tcid);
+						relation.put("target", target);
+						relation.put("value", num);
+						
+						relations.add(relation);
+					}
+					for(int z = 0; z < l2; z++) {
+						String[] info = ((String) map[j][i].get(z)).split(",");
+						String source = info[0];
+						String target = info[1];
+						String time = info[2];
+						int num = Integer.parseInt(info[3]);
+						allNum += num;
+						
+						JSONObject relation = new JSONObject();
+						relation.put("hour", time);
+						relation.put("source", source);
+						relation.put("sourceCid", tcid);
+						relation.put("targetCid", scid);
+						relation.put("target", target);
+						relation.put("value", num);
+						
+						relations.add(relation);
+					}
+					
 					JSONObject linkObj = new JSONObject();
-					linkObj.put("source", i);
-					linkObj.put("target",j);
-					linkObj.put("value", map[i][j] + map[j][i]);
+					linkObj.put("source", scid);
+					linkObj.put("target", tcid);
+					linkObj.put("value", allNum);
+					linkObj.put("relations", relations);
 					links.add(linkObj);
 				}
 			}
+		}
+		
+		for(int i = 0; i < count; i++) {
+			JSONObject nodeObj = new JSONObject();
+			nodeObj.put("id", (int)cidMap1.get(i));
+			nodeObj.put("color", colorList[i]);
+			nodes.add(nodeObj);
 		}
 		
 		res.put("nodes", nodes);

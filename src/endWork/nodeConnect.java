@@ -29,8 +29,7 @@ public class nodeConnect extends HttpServlet {
     /**
      * @see HttpServlet#HttpServlet()
      */
-	private static final String DAY_TABLE = "B_LEASEINFOHIS_SUM_BYDAY";
-	private static final String HOUR_TABLE = "B_LEASEINFOHIS_SUM";
+	private static final String HOUR_TABLE = "B_LEASEINFOHIS_SUM_PART";
 	
     public nodeConnect() {
         super();
@@ -53,7 +52,7 @@ public class nodeConnect extends HttpServlet {
 		
 		JSONObject res = new JSONObject();
 		
-		String DB_TABLE = this.HOUR_TABLE + "_" + Day;
+		String DB_TABLE = this.HOUR_TABLE;
 		
 		// nodeId循环，建立set集合
 		// 节点信息集合
@@ -73,20 +72,20 @@ public class nodeConnect extends HttpServlet {
 			System.out.print("connect success\n");
 			
 			/*
-			 SELECT * FROM B_LEASEINFOHIS_SUM_2014_04_16 A
-             WHERE A.LEASEDATE = '08' AND ((A.LEASESTATION = '3214' AND A.RETURNSTATION = '2409') 
-             OR (A.LEASESTATION = '2409' AND A.RETURNSTATION = '3214'));
+			 SELECT * FROM B_LEASEINFOHIS_SUM_PART partition(D20140416) WHERE LEASETIME = '08' 
+			 AND ((LEASESTATION = '3214' AND RETURNSTATION = '2409') 
+			 OR (LEASESTATION = '2409' AND RETURNSTATION = '3214'));
 			 */
 			
 			// SQL预处理
 			String sqlNode = "SELECT * FROM B_STATIONINFO_BRIEF WHERE STATIONID = ?";
 					
-			String sqlHour = "SELECT * FROM " + DB_TABLE 
+			String sqlHour = "SELECT * FROM B_LEASEINFOHIS_SUM_PART partition(D" + Day + ")"
 					+ " WHERE LEASETIME = ?"
 					+ " AND ((LEASESTATION = ? AND RETURNSTATION = ?)"
 					+ " OR (LEASESTATION = ? AND RETURNSTATION = ?))";
 			
-			String sqlNoHour = "SELECT * FROM " + DB_TABLE 
+			String sqlNoHour = "SELECT * FROM B_LEASEINFOHIS_SUM_PART partition(D" + Day + ")"
 					+ " WHERE ((LEASESTATION = ? AND RETURNSTATION = ?)"
 					+ " OR (LEASESTATION = ? AND RETURNSTATION = ?))";
 					

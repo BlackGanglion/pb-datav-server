@@ -9,7 +9,8 @@ public class connect {
 	
 	public static final String DBDRIVER = "oracle.jdbc.driver.OracleDriver";
 	// 定义数据库的连接地址
-	public static final String DBURL = "jdbc:oracle:thin:@localhost:49161/xe";
+	// public static final String DBURL = "jdbc:oracle:thin:@localhost:49161/xe";
+	 public static final String DBURL = "jdbc:oracle:thin:@10.211.55.11:1521:ora11g";
 	//端口号后标识符可以通过在doc下运行lsnrctl status查看  default:1521
 	// 数据库的连接用户名
 	public static final String DBUSER = "system";
